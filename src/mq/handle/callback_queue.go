@@ -3,6 +3,7 @@ package handle
 import (
 	"context"
 	"errors"
+
 	"github.com/assimon/luuu/config"
 	"github.com/assimon/luuu/model/data"
 	"github.com/assimon/luuu/model/mdb"
@@ -44,7 +45,7 @@ func OrderCallbackHandle(ctx context.Context, t *asynq.Task) error {
 		OrderId:            order.OrderId,
 		Amount:             order.Amount,
 		ActualAmount:       order.ActualAmount,
-		Token:              order.Token,
+		Token:              order.TokenWithChainPrefix,
 		BlockTransactionId: order.BlockTransactionId,
 		Status:             mdb.StatusPaySuccess,
 	}

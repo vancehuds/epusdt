@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/assimon/luuu/config"
+	"github.com/assimon/luuu/model"
 	"github.com/assimon/luuu/model/data"
 	"github.com/assimon/luuu/model/request"
 	"github.com/assimon/luuu/mq"
@@ -32,7 +33,7 @@ type UsdtTrc20Resp struct {
 	Data     []Data `json:"data"`
 }
 
-type PolygonResp struct {
+type EtherscanResp struct {
 	Status  string   `json:"status"`
 	Message string   `json:"message"`
 	Data    []Result `json:"result"`
@@ -103,7 +104,8 @@ func Trc20CallBack(token string, wg *sync.WaitGroup) {
 			log.Sugar.Error(err)
 		}
 	}()
-	if !data.IsWalletLocked(token) {
+	tokenWithChainPrefix := "trc20:" + token
+	if !data.IsWalletLocked(tokenWithChainPrefix) {
 		return
 	}
 	client := http_client.GetHttpClient()
@@ -144,7 +146,7 @@ func Trc20CallBack(token string, wg *sync.WaitGroup) {
 		}
 		decimalDivisor := decimal.NewFromFloat(1000000)
 		amount := decimalQuant.Div(decimalDivisor).InexactFloat64()
-		tradeId, err := data.GetTradeIdByWalletAddressAndAmount(token, amount)
+		tradeId, err := data.GetTradeIdByWalletAddressAndAmount(tokenWithChainPrefix, amount)
 		if err != nil {
 			panic(err)
 		}
@@ -162,10 +164,10 @@ func Trc20CallBack(token string, wg *sync.WaitGroup) {
 		}
 		// 到这一步就完全算是支付成功了
 		req := &request.OrderProcessingRequest{
-			Token:              token,
-			TradeId:            tradeId,
-			Amount:             amount,
-			BlockTransactionId: transfer.Hash,
+			TokenWithChainPrefix: tokenWithChainPrefix,
+			TradeId:              tradeId,
+			Amount:               amount,
+			BlockTransactionId:   transfer.Hash,
 		}
 		err = OrderProcessing(req)
 		if err != nil {
@@ -185,27 +187,46 @@ func Trc20CallBack(token string, wg *sync.WaitGroup) {
 <pre>订单创建时间：%s</pre>
 <pre>支付成功时间：%s</pre>
 `
-		msg := fmt.Sprintf(msgTpl, order.TradeId, order.OrderId, order.Amount, order.ActualAmount, order.Token, order.CreatedAt.ToDateTimeString(), carbon.Now().ToDateTimeString())
+		msg := fmt.Sprintf(msgTpl,
+			order.TradeId, order.OrderId, order.Amount, order.ActualAmount, tokenWithChainPrefix, order.CreatedAt.ToDateTimeString(), carbon.Now().ToDateTimeString())
 		telegram.SendToBot(msg)
 	}
 }
 
-// PolygonCallBack Polygon回调
-func PolygonCallBack(token string, wg *sync.WaitGroup) {
+func EtherscanCallBack(chainName, token string, wg *sync.WaitGroup) {
 	defer wg.Done()
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Println("PolygonCallBack:", time.Now().UTC().Format("2006-01-02 15:04:05 MST"), err)
+			fmt.Println("EtherscanCallBack:", time.Now().UTC().Format("2006-01-02 15:04:05 MST"), err)
 			log.Sugar.Error(err)
 		}
 	}()
-	if !data.IsWalletLocked(token) {
+	var chainId string
+	switch chainName {
+	case model.ChainNamePolygonPOS:
+		chainId = "137"
+	case model.ChainNameBSC:
+		chainId = "56"
+	default:
+		return
+	}
+	var usdtContract string
+	switch chainName {
+	case model.ChainNamePolygonPOS:
+		usdtContract = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
+	case model.ChainNameBSC:
+		usdtContract = "0x55d398326f99059fF775485246999027B3197955"
+	default:
+		return
+	}
+	tokenWithChainPrefix := chainName + ":" + token
+	if !data.IsWalletLocked(tokenWithChainPrefix) {
 		return
 	}
 	client := http_client.GetHttpClient()
 	apiKey := config.GetEtherscanApi()
 	resp, err := client.R().SetQueryParams(map[string]string{
-		"chainid": "137", // polygon
+		"chainid": chainId,
 		"module":  "account",
 		"action":  "tokentx",
 		"address": token,
@@ -221,19 +242,20 @@ func PolygonCallBack(token string, wg *sync.WaitGroup) {
 		panic(resp.StatusCode())
 	}
 	//println(resp.String())
-	var polygonResp PolygonResp
+	var etherscanResp EtherscanResp
 	body := resp.Body()
-	err = json.Cjson.Unmarshal(body, &polygonResp)
+	err = json.Cjson.Unmarshal(body, &etherscanResp)
 	if err != nil {
 		panic(err)
 	}
-	if polygonResp.Status != "1" {
+	if etherscanResp.Status != "1" {
 		panic(string(body))
 	}
-	for _, transfer := range polygonResp.Data {
+	for _, transfer := range etherscanResp.Data {
 		confirmation, _ := strconv.Atoi(transfer.Confirmations)
-		isUSDT := strings.EqualFold(transfer.TokenSymbol, "USDT") && strings.EqualFold(transfer.ContractAddress, "0xc2132d05d31c914a87c6611c10748aeb04b58e8f")
-		isToThisAccount := strings.EqualFold(transfer.To, token) // polygon 地址不区分大小写
+		// EVM 地址不区分大小写
+		isUSDT := strings.EqualFold(transfer.ContractAddress, usdtContract)
+		isToThisAccount := strings.EqualFold(transfer.To, token)
 		if !isUSDT || !isToThisAccount || confirmation < 5 {
 			// fmt.Println("不符合条件的转账:", transfer)
 			continue
@@ -244,7 +266,7 @@ func PolygonCallBack(token string, wg *sync.WaitGroup) {
 		}
 		decimalDivisor := decimal.NewFromFloat(1000000)
 		amount := decimalQuant.Div(decimalDivisor).InexactFloat64()
-		tradeId, err := data.GetTradeIdByWalletAddressAndAmount(token, amount)
+		tradeId, err := data.GetTradeIdByWalletAddressAndAmount(tokenWithChainPrefix, amount)
 		if err != nil {
 			panic(err)
 		}
@@ -266,10 +288,10 @@ func PolygonCallBack(token string, wg *sync.WaitGroup) {
 		}
 		// 到这一步就完全算是支付成功了
 		req := &request.OrderProcessingRequest{
-			Token:              token,
-			TradeId:            tradeId,
-			Amount:             amount,
-			BlockTransactionId: transfer.Hash,
+			TokenWithChainPrefix: tokenWithChainPrefix,
+			TradeId:              tradeId,
+			Amount:               amount,
+			BlockTransactionId:   transfer.Hash,
 		}
 		err = OrderProcessing(req)
 		if err != nil {
@@ -289,7 +311,8 @@ func PolygonCallBack(token string, wg *sync.WaitGroup) {
 <pre>订单创建时间：%s</pre>
 <pre>支付成功时间：%s</pre>
 `
-		msg := fmt.Sprintf(msgTpl, order.TradeId, order.OrderId, order.Amount, order.ActualAmount, order.Token, order.CreatedAt.ToDateTimeString(), carbon.Now().ToDateTimeString())
+		msg := fmt.Sprintf(msgTpl,
+			order.TradeId, order.OrderId, order.Amount, order.ActualAmount, tokenWithChainPrefix, order.CreatedAt.ToDateTimeString(), carbon.Now().ToDateTimeString())
 		telegram.SendToBot(msg)
 	}
 }

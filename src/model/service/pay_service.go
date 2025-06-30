@@ -2,6 +2,8 @@ package service
 
 import (
 	"errors"
+	"strings"
+
 	"github.com/assimon/luuu/config"
 	"github.com/assimon/luuu/model/data"
 	"github.com/assimon/luuu/model/mdb"
@@ -17,10 +19,18 @@ func GetCheckoutCounterByTradeId(tradeId string) (*response.CheckoutCounterRespo
 	if orderInfo.ID <= 0 || orderInfo.Status != mdb.StatusWaitPay {
 		return nil, errors.New("不存在待支付订单或已过期！")
 	}
+	channel := ""
+	token := orderInfo.TokenWithChainPrefix
+	if strings.Count(token, ":") == 1 {
+		parts := strings.Split(token, ":")
+		channel = parts[0]
+		token = parts[1]
+	}
 	resp := &response.CheckoutCounterResponse{
 		TradeId:        orderInfo.TradeId,
 		ActualAmount:   orderInfo.ActualAmount,
-		Token:          orderInfo.Token,
+		Channel:        channel,
+		Token:          token,
 		ExpirationTime: orderInfo.CreatedAt.AddMinutes(config.GetOrderExpirationTime()).TimestampWithMillisecond(),
 		RedirectUrl:    orderInfo.RedirectUrl,
 	}

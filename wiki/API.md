@@ -79,7 +79,7 @@ POST /api/v1/order/create-transaction
 {
   "order_id": "2022123321312321321",
   "amount": 100,
-  "channel": "polygon",
+  "channel": "trc20",
   "notify_url": "http://example.com/",
   "redirect_url": "http://example.com/",
   "signature": "xsadaxsaxsa"
@@ -94,7 +94,7 @@ POST /api/v1/order/create-transaction
 | » order_id     |body| string | 是 | 请求支付订单号            |                |
 | » amount       |body| number | 是 | 请求支付金额 `CNY 或 任何币种`         | 小数点保留后2位，最少0.01 |
 | » exchange_rate|body| string | 否 | 汇率 `x`  | `x` 支付金额 = 1 USDT，不填则默认为 `usd to cny` 的汇率        |
-| » channel      |body| string | 否 | 所属链(trc20或polygon) | 不填则收 Polygon         |
+| » channel      |body| string | 否 | 所属链(trc20/polygon/bsc) | 不填则收 polygon         |
 | » notify_url   |body| string | 是 | 异步回调地址             |                |
 | » redirect_url |body| string | 否 | 同步跳转地址             ||
 | » signature    |body| string | 是 | 签名                 | 接口统一加密方式       |
@@ -112,7 +112,7 @@ POST /api/v1/order/create-transaction
     "order_id": "9",
     "amount": 53,
     "actual_amount": 7.9104,
-    "token": "TNEns8t9jbWENbStkQdVQtHMGpbsYsQjZK",
+    "token": "trc20:TNEns8t9jbWENbStkQdVQtHMGpbsYsQjZK",
     "expiration_time": 1648381192,
     "payment_url": "http://example.com/pay/checkout-counter/202203271648380592218340"
   },
@@ -160,7 +160,7 @@ POST 【异步回调地址】
   "order_id": "2022123321312321321",
   "amount": 100,
   "actual_amount": 15.625,
-  "token": "TNEns8t9jbWENbStkQdVQtHMGpbsYsQjZK",
+  "token": "trc20:TNEns8t9jbWENbStkQdVQtHMGpbsYsQjZK",
   "block_transaction_id": "123333333321232132131",
   "signature": "xsadaxsaxsa",
   "status": 2

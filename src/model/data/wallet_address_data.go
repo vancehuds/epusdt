@@ -8,7 +8,7 @@ import (
 
 // AddWalletAddress 创建钱包
 func AddWalletAddress(token string, channel string) (*mdb.WalletAddress, error) {
-	exist, err := GetWalletAddressByToken(token)
+	exist, err := GetWalletAddressByToken(token, channel)
 	if err != nil {
 		return nil, err
 	}
@@ -24,10 +24,9 @@ func AddWalletAddress(token string, channel string) (*mdb.WalletAddress, error) 
 	return walletAddress, err
 }
 
-// GetWalletAddressByToken 通过钱包地址获取token
-func GetWalletAddressByToken(token string) (*mdb.WalletAddress, error) {
+func GetWalletAddressByToken(token, channel string) (*mdb.WalletAddress, error) {
 	walletAddress := new(mdb.WalletAddress)
-	err := dao.Mdb.Model(walletAddress).Limit(1).Find(walletAddress, "token = ?", token).Error
+	err := dao.Mdb.Model(walletAddress).Limit(1).Find(walletAddress, "token = ? AND channel = ?", token, channel).Error
 	return walletAddress, err
 }
 
@@ -55,6 +54,13 @@ func GetAvailableTrc20Wallet() ([]mdb.WalletAddress, error) {
 func GetAvailablePolygonWallet() ([]mdb.WalletAddress, error) {
 	var WalletAddressList []mdb.WalletAddress
 	err := dao.Mdb.Model(WalletAddressList).Where("channel = 'polygon' and status = ?", mdb.TokenStatusEnable).Find(&WalletAddressList).Error
+	return WalletAddressList, err
+}
+
+// GetAvailableBscWallet 获得所有可用的钱包地址
+func GetAvailableBSCWallet() ([]mdb.WalletAddress, error) {
+	var WalletAddressList []mdb.WalletAddress
+	err := dao.Mdb.Model(WalletAddressList).Where("channel = 'bsc' and status = ?", mdb.TokenStatusEnable).Find(&WalletAddressList).Error
 	return WalletAddressList, err
 }
 

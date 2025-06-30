@@ -24,8 +24,8 @@ func (r CreateTransactionRequest) Translates() map[string]string {
 
 // OrderProcessingRequest 订单处理
 type OrderProcessingRequest struct {
-	Token              string
-	Amount             float64
-	TradeId            string
-	BlockTransactionId string
+	TokenWithChainPrefix string
+	Amount               float64
+	TradeId              string
+	BlockTransactionId   string
 }

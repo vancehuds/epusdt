@@ -9,11 +9,8 @@ func Start() {
 			cron.SkipIfStillRunning(cron.DefaultLogger),
 		),
 	)
-	// 汇率监听
 	c.AddJob("@every 60s", UsdtRateJob{})
-	// trc20钱包监听
 	c.AddJob("@every 15s", ListenTrc20Job{})
-	// polygon钱包监听
-	c.AddJob("@every 15s", ListenPolygonJob{})
+	c.AddJob("@every 15s", ListenEvmJob{})
 	c.Start()
 }

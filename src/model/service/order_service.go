@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/assimon/luuu/config"
+	"github.com/assimon/luuu/model"
 	"github.com/assimon/luuu/model/dao"
 	"github.com/assimon/luuu/model/data"
 	"github.com/assimon/luuu/model/mdb"
@@ -64,23 +65,21 @@ func CreateTransaction(req *request.CreateTransactionRequest) (*response.CreateT
 	var walletAddress []mdb.WalletAddress
 
 	switch channel {
-	case "trc20":
-		trc20Wallet, trc20Err := data.GetAvailableTrc20Wallet()
-		walletAddress = trc20Wallet
-		err = trc20Err
+	case model.ChainNameTRC20:
+		walletAddress, err = data.GetAvailableTrc20Wallet()
+	case model.ChainNameBSC:
+		walletAddress, err = data.GetAvailableBSCWallet()
 	default:
-		channel = "polygon"
-		polygonWallet, polygonErr := data.GetAvailablePolygonWallet()
-		walletAddress = polygonWallet
-		err = polygonErr
+		channel = model.ChainNamePolygonPOS
+		walletAddress, err = data.GetAvailablePolygonWallet()
 	}
-
 	if err != nil {
 		return nil, err
 	}
 	if len(walletAddress) <= 0 {
 		return nil, constant.NotAvailableWalletAddress
 	}
+
 	amount := math.MustParsePrecFloat64(decimalUsdt.InexactFloat64(), 2)
 	availableToken, availableAmount, err := CalculateAvailableWalletAndAmount(amount, walletAddress)
 	if err != nil {
@@ -91,14 +90,14 @@ func CreateTransaction(req *request.CreateTransactionRequest) (*response.CreateT
 	}
 	tx := dao.Mdb.Begin()
 	order := &mdb.Orders{
-		TradeId:      GenerateCode(),
-		OrderId:      req.OrderId,
-		Amount:       req.Amount,
-		ActualAmount: availableAmount,
-		Token:        availableToken,
-		Status:       mdb.StatusWaitPay,
-		NotifyUrl:    req.NotifyUrl,
-		RedirectUrl:  req.RedirectUrl,
+		TradeId:              GenerateCode(),
+		OrderId:              req.OrderId,
+		Amount:               req.Amount,
+		ActualAmount:         availableAmount,
+		TokenWithChainPrefix: channel + ":" + availableToken,
+		Status:               mdb.StatusWaitPay,
+		NotifyUrl:            req.NotifyUrl,
+		RedirectUrl:          req.RedirectUrl,
 	}
 	err = data.CreateOrderWithTransaction(tx, order)
 	if err != nil {
@@ -106,7 +105,7 @@ func CreateTransaction(req *request.CreateTransactionRequest) (*response.CreateT
 		return nil, err
 	}
 	// 锁定支付池
-	err = data.LockTransaction(availableToken, order.TradeId, availableAmount, config.GetOrderExpirationTimeDuration())
+	err = data.LockTransaction(order.TokenWithChainPrefix, order.TradeId, availableAmount, config.GetOrderExpirationTimeDuration())
 	if err != nil {
 		tx.Rollback()
 		return nil, err
@@ -121,7 +120,7 @@ func CreateTransaction(req *request.CreateTransactionRequest) (*response.CreateT
 		OrderId:        order.OrderId,
 		Amount:         order.Amount,
 		ActualAmount:   order.ActualAmount,
-		Token:          order.Token,
+		Token:          order.TokenWithChainPrefix,
 		ExpirationTime: ExpirationTime,
 		PaymentUrl:     fmt.Sprintf("%s/pay/checkout-counter/%s", config.GetAppUri(), order.TradeId),
 	}
@@ -146,7 +145,7 @@ func OrderProcessing(req *request.OrderProcessingRequest) error {
 		return err
 	}
 	// 解锁交易
-	err = data.UnLockTransaction(req.Token, req.Amount)
+	err = data.UnLockTransaction(req.TokenWithChainPrefix, req.Amount)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -162,13 +161,12 @@ func CalculateAvailableWalletAndAmount(amount float64, walletAddress []mdb.Walle
 	calculateAvailableWalletFunc := func(amount float64) (string, error) {
 		availableWallet := ""
 		for _, address := range walletAddress {
-			token := address.Token
-			result, err := data.GetTradeIdByWalletAddressAndAmount(token, amount)
+			result, err := data.GetTradeIdByWalletAddressAndAmount(address.Channel+":"+address.Token, amount)
 			if err != nil {
 				return "", err
 			}
 			if result == "" {
-				availableWallet = token
+				availableWallet = address.Token
 				break
 			}
 		}

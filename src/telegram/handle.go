@@ -2,16 +2,18 @@ package telegram
 
 import (
 	"fmt"
+	"strings"
+
+	"github.com/assimon/luuu/model"
 	"github.com/assimon/luuu/model/data"
 	"github.com/assimon/luuu/model/mdb"
 	"github.com/gookit/goutil/mathutil"
 	"github.com/gookit/goutil/strutil"
 	tb "gopkg.in/telebot.v3"
-	"strings"
 )
 
 const (
-	ReplayAddWallet = "请输入钱包地址, 目前仅支持trc20与polygon链"
+	ReplayAddWallet = "请输入钱包地址, 目前仅支持 trc20 polygon bsc 链。"
 )
 
 func OnTextMessageHandle(c tb.Context) error {
@@ -20,11 +22,17 @@ func OnTextMessageHandle(c tb.Context) error {
 		walletAddress := c.Message().Text
 		var channel = ""
 		if strings.HasPrefix(walletAddress, "T") {
-			channel = "trc20"
+			channel = model.ChainNameTRC20
 		} else if strings.HasPrefix(walletAddress, "0x") {
-			channel = "polygon"
+			return c.Send("EVM 系列钱包地址请在地址前加上所属链和英文冒号，以区分不同的链，例如 polygon: bsc:")
+		} else if strings.HasPrefix(walletAddress, "polygon:0x") {
+			channel = model.ChainNamePolygonPOS
+			walletAddress = strings.TrimPrefix(walletAddress, "polygon:")
+		} else if strings.HasPrefix(walletAddress, "bsc:0x") {
+			channel = model.ChainNameBSC
+			walletAddress = strings.TrimPrefix(walletAddress, "bsc:")
 		} else {
-			return c.Send("不支持该钱包地址！仅支持trc20或polygon钱包地址!")
+			return c.Send("不支持该钱包地址！")
 		}
 		_, err := data.AddWalletAddress(walletAddress, channel)
 		if err != nil {
@@ -50,7 +58,7 @@ func WalletList(c tb.Context) error {
 		var temp []tb.InlineButton
 		btnInfo := tb.InlineButton{
 			Unique: wallet.Token,
-			Text:   fmt.Sprintf("%s[%s]", wallet.Token, status),
+			Text:   fmt.Sprintf("[%s] %s [%s]", wallet.Channel, wallet.Token, status),
 			Data:   strutil.MustString(wallet.ID),
 		}
 		bots.Handle(&btnInfo, WalletInfo)

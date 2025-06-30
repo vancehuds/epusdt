@@ -2,6 +2,7 @@ package handle
 
 import (
 	"context"
+
 	"github.com/assimon/luuu/model/data"
 	"github.com/assimon/luuu/model/mdb"
 	"github.com/hibiken/asynq"
@@ -27,7 +28,7 @@ func OrderExpirationHandle(ctx context.Context, t *asynq.Task) error {
 	if err != nil {
 		return err
 	}
-	err = data.UnLockTransaction(orderInfo.Token, orderInfo.ActualAmount)
+	err = data.UnLockTransaction(orderInfo.TokenWithChainPrefix, orderInfo.ActualAmount)
 	if err != nil {
 		return err
 	}
