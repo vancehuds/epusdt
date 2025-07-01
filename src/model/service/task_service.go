@@ -227,6 +227,13 @@ func EtherscanCallBack(chainName, token string, wg *sync.WaitGroup) {
 	default:
 		return
 	}
+	var decimalDivisor decimal.Decimal
+	switch chainName {
+	case model.ChainNameBSC:
+		decimalDivisor = decimal.NewFromFloat(1000000000000000000) // 18
+	default:
+		decimalDivisor = decimal.NewFromFloat(1000000) // 6
+	}
 	tokenWithChainPrefix := chainName + ":" + token
 	if !data.IsWalletLocked(tokenWithChainPrefix) {
 		return
@@ -272,7 +279,6 @@ func EtherscanCallBack(chainName, token string, wg *sync.WaitGroup) {
 		if err != nil {
 			panic(err)
 		}
-		decimalDivisor := decimal.NewFromFloat(1000000)
 		amount := decimalQuant.Div(decimalDivisor).InexactFloat64()
 		tradeId, err := data.GetTradeIdByWalletAddressAndAmount(tokenWithChainPrefix, amount)
 		if err != nil {
